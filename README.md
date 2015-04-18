@@ -29,9 +29,16 @@ To run the build more directly, use a psake command:
 
 ```Invoke-psake build-steps.ps1 -parameters @{"configFile"="C:\path\to\config.ps1"}```
 
+
 At this point you are just running a Psake command, but using the targets defined for you in build-steps.
 
+Current parameters supported include:
+
+* configFile - path to your custom config file
+* packagesPath - custom out put path for generated packages. Defaults to ```.\packages```
+
 If you don't specify a path to your config file, it defaults to ```.\config.ps1```
+
 
 ## Features
 

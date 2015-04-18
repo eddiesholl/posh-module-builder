@@ -1,168 +1,171 @@
 $ErrorActionPreference = 'stop'
 
-properties {
-  if ($configFile -eq $null) { $configFile = ".\config.ps1" }
+$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
-  if (!(test-path $configFile)) { Write-Error "Could not find mandatory config file $configFile" }
+Properties {
+    if ($configFile -eq $null) { $configFile = ".\config.ps1" }
 
-  . $configFile
+    if (!(Test-Path $configFile)) { Write-Error "Could not find mandatory config file $configFile" }
 
-  if ($modulesToPack -eq $null) { Write-Error "Variable modulesToPack not set. Please include this in $configFile" }
+    . $configFile
 
-  $absoluteModulePaths = $modulesToPack | foreach {
-    if ([System.IO.Path]::IsPathRooted($_))
-    {
-      return $_
+    if ($modulesToPack -eq $null) { Write-Error "Variable modulesToPack not set. Please include this in $configFile" }
+
+    $absoluteModulePaths = $modulesToPack | ForEach-Object {
+        if ([System.IO.Path]::IsPathRooted($_))
+        {
+            return $_
+        }
+        else {
+            return Join-Path $scriptPath $_
+        }
     }
-    else {
-        return join-path $scriptPath $_
-    }
-  }
+
+    if (!$packagesDir) { $packagesDir = Join-Path $scriptPath "packages" }
+
+    $installScript = Join-Path $packagesDir "install-modules.ps1"
+
 }
 
 Task default -Depends Full
 
-$scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
 
-$packagesDir = join-path $scriptPath "packages"
-$installScript = join-path $packagesDir "install-modules.ps1"
+$rootBuildFolder = Join-Path $scriptPath 'build'
 
-$rootBuildFolder = join-path $scriptPath 'build'
-
-write-host "Using ScriptPath $scriptPath"
-write-host "Using PackagesDir $packagesDir"
-write-host "Using RootBuildFolder $rootBuildFolder"
+Write-Host "Using ScriptPath $scriptPath"
+Write-Host "Using PackagesDir $packagesDir"
+Write-Host "Using RootBuildFolder $rootBuildFolder"
 
 Task Full -Depends Pack
 
-Task Pack -Depends Clean, Test, Build {
-   
-   new-item -type Directory $packagesDir | out-null
+Task Pack -Depends Clean,Test,Build {
 
-   ls -Directory $rootBuildFolder | foreach {
+    New-Item -Type Directory $packagesDir | Out-Null
+
+    ls -Directory $rootBuildFolder | ForEach-Object {
         Pack-Module $_.FullName $packagesDir
-   }
+    }
 
-   # Generate a script that can be used to install all generated modules
-   ls $packagesDir -Filter '*.zip' | foreach {
-    $content = "Install-Module -ModulePath `"$($_.FullName)`" -Update"
-    Add-Content $installScript $content
-  }
+    # Generate a script that can be used to install all generated modules
+    ls $packagesDir -Filter '*.zip' | ForEach-Object {
+        $content = "Install-Module -ModulePath `"$($_.FullName)`" -Update"
+        Add-Content $installScript $content
+    }
 
 }
 
 Task Clean {
-    if (test-path $packagesDir) {
-        remove-item $packagesDir -recurse
+    if (Test-Path $packagesDir) {
+        Remove-Item $packagesDir -Recurse
     }
 
-    if (test-path $rootBuildFolder) {
-        remove-item $rootBuildFolder -recurse
+    if (Test-Path $rootBuildFolder) {
+        Remove-Item $rootBuildFolder -Recurse
     }
 }
 
 Task Test {
-   
-    $absoluteModulePaths | foreach {
+
+    $absoluteModulePaths | ForEach-Object {
         Test-Module $_
-   }
- }
+    }
+}
 
- Task Build {
+Task Build {
 
-    if (!(test-path $rootBuildFolder)) { new-item -type directory $rootBuildFolder | out-null }
+    if (!(Test-Path $rootBuildFolder)) { New-Item -Type directory $rootBuildFolder | Out-Null }
 
-    $absoluteModulePaths | foreach {
+    $absoluteModulePaths | ForEach-Object {
         Build-Module $_
-   }
- }
+    }
+}
 
 function Build-Module {
-    Param(
-        [Parameter(Mandatory=$true)]
+    param(
+        [Parameter(Mandatory = $true)]
         [string]$moduleFolder
     )
 
-    $moduleName = split-path $moduleFolder -leaf
-    $outputFolder = join-path $rootBuildFolder $moduleName
+    $moduleName = Split-Path $moduleFolder -Leaf
+    $outputFolder = Join-Path $rootBuildFolder $moduleName
 
     Write-Host "Building module from $moduleFolder into $outputFolder"
 
-    if (!(test-path $outputFolder)) { new-item -type directory $outputFolder | out-null }
+    if (!(Test-Path $outputFolder)) { New-Item -Type directory $outputFolder | Out-Null }
 
-    $psdPath = join-path $moduleFolder "$moduleName.psd1"
-    $psmPath = join-path $moduleFolder "$moduleName.psm1"
+    $psdPath = Join-Path $moduleFolder "$moduleName.psd1"
+    $psmPath = Join-Path $moduleFolder "$moduleName.psm1"
 
-    if (test-path $psmPath)
+    if (Test-Path $psmPath)
     {
-      copy-item $psmPath $outputFolder
+        Copy-Item $psmPath $outputFolder
     }
     else {
-        write-error "Could not find module script at $psmPath"
+        Write-Error "Could not find module script at $psmPath"
     }
 
-    $manifestContent = test-modulemanifest $psdPath
+    $manifestContent = Test-ModuleManifest $psdPath
 
-    if (!$manifestContent) { write-error "Could not parse module manifest $psdPath" }
+    if (!$manifestContent) { Write-Error "Could not parse module manifest $psdPath" }
 
     $scriptsToProcess = $manifestContent.NestedModules
 
     if ($scriptsToProcess -and $scriptsToProcess.Length -gt 0)
     {
-      write-host "Updating NestedModules in $psdPath"
+        Write-Host "Updating NestedModules in $psdPath"
 
-      $updatedScriptPaths = @()
-      $scriptsToProcess | foreach {
-          $scriptPath = $_.Path
-          if (test-path $scriptPath)
-          {
-            write-host "Copying referenced script $scriptPath to $outputFolder"
-            copy-item $scriptPath $outputFolder
+        $updatedScriptPaths = @()
+        $scriptsToProcess | ForEach-Object {
+            $scriptPath = $_.Path
+            if (Test-Path $scriptPath)
+            {
+                Write-Host "Copying referenced script $scriptPath to $outputFolder"
+                Copy-Item $scriptPath $outputFolder
 
-            $newRelativeScriptPath = split-path -leaf $scriptPath
-            $updatedScriptPaths += $newRelativeScriptPath
-            Write-Host "Using new relative path for script $newRelativeScriptPath"
-          }
-          else {
-              write-error "Could not find referenced script file $scriptPath"
-          }
-      }
+                $newRelativeScriptPath = Split-Path -Leaf $scriptPath
+                $updatedScriptPaths += $newRelativeScriptPath
+                Write-Host "Using new relative path for script $newRelativeScriptPath"
+            }
+            else {
+                Write-Error "Could not find referenced script file $scriptPath"
+            }
+        }
 
-     $updatedPsdPath = join-path $outputFolder "$moduleName.psd1"
+        $updatedPsdPath = Join-Path $outputFolder "$moduleName.psd1"
 
-      New-ModuleManifest -Path $updatedPsdPath -ScriptsToProcess $manifestContent.Scripts -NestedModules $updatedScriptPaths -Guid $manifestContent.Guid -Author $manifestContent.Author -CompanyName $manifestContent.CompanyName -Copyright $manifestContent.Copyright -RootModule $manifestContent.RootModule -ModuleVersion $manifestContent.Version -Description $manifestContent.Description -ProcessorArchitecture $manifestContent.ProcessorArchitecture -PowerShellVersion $manifestContent.PowerShellVersion -ClrVersion $manifestContent.ClrVersion -DotNetFrameworkVersion $manifestContent.DotNetFrameworkVersion -PowerShellHostName $manifestContent.PowerShellHostName -PowerShellHostVersion $manifestContent.PowerShellVersion -RequiredModules $manifestContent.RequiredModules -TypesToProcess $manifestContent.TypesToProcess -FormatsToProcess $manifestContent.FormatsToProcess -RequiredAssemblies $manifestContent.RequiredAssemblies -FileList $manifestContent.FileList -ModuleList $manifestContent.ModuleList -FunctionsToExport $manifestContent.FunctionsToExport -AliasesToExport $manifestContent.AliasesToExport -VariablesToExport $manifestContent.VariablesToExport -CmdletsToExport $manifestContent.CmdletsToExport -PrivateData $manifestContent.PrivateData -HelpInfoUri $manifestContent.HelpInfoUri
+        New-ModuleManifest -Path $updatedPsdPath -ScriptsToProcess $manifestContent.Scripts -NestedModules $updatedScriptPaths -Guid $manifestContent.Guid -Author $manifestContent.Author -CompanyName $manifestContent.CompanyName -Copyright $manifestContent.Copyright -RootModule $manifestContent.RootModule -ModuleVersion $manifestContent.Version -Description $manifestContent.Description -ProcessorArchitecture $manifestContent.ProcessorArchitecture -PowerShellVersion $manifestContent.PowerShellVersion -ClrVersion $manifestContent.ClrVersion -DotNetFrameworkVersion $manifestContent.DotNetFrameworkVersion -PowerShellHostName $manifestContent.PowerShellHostName -PowerShellHostVersion $manifestContent.PowerShellVersion -RequiredModules $manifestContent.RequiredModules -TypesToProcess $manifestContent.TypesToProcess -FormatsToProcess $manifestContent.FormatsToProcess -RequiredAssemblies $manifestContent.RequiredAssemblies -FileList $manifestContent.FileList -ModuleList $manifestContent.ModuleList -FunctionsToExport $manifestContent.FunctionsToExport -AliasesToExport $manifestContent.AliasesToExport -VariablesToExport $manifestContent.VariablesToExport -CmdletsToExport $manifestContent.CmdletsToExport -PrivateData $manifestContent.PrivateData -HelpInfoUri $manifestContent.HelpInfoUri
     }
-    elseif (test-path $psdPath) {
-		write-host "Using original manifest file $psdPath"
-      copy-item $psdPath $outputFolder
+    elseif (Test-Path $psdPath) {
+        Write-Host "Using original manifest file $psdPath"
+        Copy-Item $psdPath $outputFolder
     }
     else {
-        write-error "Could not find module manifest at $psdPath"
+        Write-Error "Could not find module manifest at $psdPath"
     }
 
 }
- 
+
 function Pack-Module {
-    Param(
-        [Parameter(Mandatory=$true)]
+    param(
+        [Parameter(Mandatory = $true)]
         [string]$sourceFolder,
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$destFolder
     )
 
-    $moduleName = split-path $sourceFolder -leaf
-    $packagePath = join-path $destFolder "$moduleName.zip"
+    $moduleName = Split-Path $sourceFolder -Leaf
+    $packagePath = Join-Path $destFolder "$moduleName.zip"
 
     Write-Host "Packing module $moduleName from $sourceFolder to $packagePath"
 
-    ls "$sourceFolder\*"  | out-zip -path $packagePath
+    ls "$sourceFolder\*" | out-zip -Path $packagePath
 
     Write-Host "Created module package $packagePath"
 }
 
 function Test-Module {
-    Param(
-        [Parameter(Mandatory=$true)]
+    param(
+        [Parameter(Mandatory = $true)]
         [string]$sourceFolder
     )
 
@@ -171,20 +174,20 @@ function Test-Module {
     Write-Host "TODO invoke Pester for tests"
 }
 
-function out-zip { 
-  Param([string]$path) 
+function out-zip {
+    param([string]$path)
 
-  if (-not $path.EndsWith('.zip')) {$path += '.zip'} 
+    if (-not $path.EndsWith('.zip')) { $path += '.zip' }
 
-  $7z = join-path $scriptPath "bin\7z.exe"
+    $7z = Join-Path $scriptPath "bin\7z.exe"
 
-  $args = @("a", $path) + $input
-  write-host "Packing zip $path with cmd line $args"
+    $args = @( "a",$path) + $input
+    Write-Host "Packing zip $path with cmd line $args"
 
-  & $7z $args
+    & $7z $args
 
-  if ($lastexitcode -ne 0)
-  {
-    write-error "7zip failed with exit code $lastexitcode"
-  }
+    if ($lastexitcode -ne 0)
+    {
+        Write-Error "7zip failed with exit code $lastexitcode"
+    }
 }
