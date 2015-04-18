@@ -1,3 +1,6 @@
+Param(
+    [hashtable]$parameters = $null
+)
 
 # Check that PsGet is installed
 if (!(Get-Command "install-module" -errorAction SilentlyContinue))
@@ -11,4 +14,4 @@ install-module psake -update
 install-module pester -update
 
 Write-Host "Running the build..."
-invoke-psake build-steps.ps1
+Invoke-psake build-steps.ps1 -parameters $parameters

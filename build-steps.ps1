@@ -8,6 +8,16 @@ properties {
   . $configFile
 
   if ($modulesToPack -eq $null) { Write-Error "Variable modulesToPack not set. Please include this in $configFile" }
+
+  $absoluteModulePaths = $modulesToPack | foreach {
+    if ([System.IO.Path]::IsPathRooted($_))
+    {
+      return $_
+    }
+    else {
+        return join-path $scriptPath $_
+    }
+  }
 }
 
 Task default -Depends Full
@@ -53,8 +63,8 @@ Task Clean {
 
 Task Test {
    
-    $modulesToPack | foreach {
-        Test-Module (join-path $scriptPath $_)
+    $absoluteModulePaths | foreach {
+        Test-Module $_
    }
  }
 
@@ -62,20 +72,18 @@ Task Test {
 
     if (!(test-path $rootBuildFolder)) { new-item -type directory $rootBuildFolder | out-null }
 
-    $modulesToPack | foreach {
-        Build-Module $scriptPath $_
+    $absoluteModulePaths | foreach {
+        Build-Module $_
    }
  }
 
 function Build-Module {
     Param(
         [Parameter(Mandatory=$true)]
-        [string]$rootFolder,
-        [Parameter(Mandatory=$true)]
-        [string]$moduleName
+        [string]$moduleFolder
     )
 
-    $moduleFolder = join-path $rootFolder $moduleName
+    $moduleName = split-path $moduleFolder -leaf
     $outputFolder = join-path $rootBuildFolder $moduleName
 
     Write-Host "Building module from $moduleFolder into $outputFolder"
@@ -159,6 +167,8 @@ function Test-Module {
     )
 
     Write-Host "Running tests in $sourceFolder"
+
+    Write-Host "TODO invoke Pester for tests"
 }
 
 function out-zip { 
