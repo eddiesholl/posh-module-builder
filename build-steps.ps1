@@ -25,22 +25,20 @@ Properties {
 
     $installScript = Join-Path $packagesDir "install-modules.ps1"
 
+    $rootBuildFolder = Join-Path $scriptPath 'build'
+
+    Write-Host "Using ScriptPath $scriptPath"
+    Write-Host "Using PackagesDir $packagesDir"
+    Write-Host "Using RootBuildFolder $rootBuildFolder"
 }
 
 Task default -Depends Full
 
-
-$rootBuildFolder = Join-Path $scriptPath 'build'
-
-Write-Host "Using ScriptPath $scriptPath"
-Write-Host "Using PackagesDir $packagesDir"
-Write-Host "Using RootBuildFolder $rootBuildFolder"
-
 Task Full -Depends Pack
 
-Task Pack -Depends Clean,Test,Build {
+Task Pack -Depends Test {
 
-    New-Item -Type Directory $packagesDir | Out-Null
+    if (!(Test-Path $packagesDir)) { New-Item -Type Directory $packagesDir | Out-Null }
 
     ls -Directory $rootBuildFolder | ForEach-Object {
         Pack-Module $_.FullName $packagesDir
@@ -56,7 +54,8 @@ Task Pack -Depends Clean,Test,Build {
 
 Task Clean {
     if (Test-Path $packagesDir) {
-        Remove-Item $packagesDir -Recurse
+        Write-Host "Removing items from $packagesDir"
+        ls $packagesDir\* -Include @("*.zip", "*.ps1") | Remove-Item
     }
 
     if (Test-Path $rootBuildFolder) {
@@ -64,14 +63,14 @@ Task Clean {
     }
 }
 
-Task Test {
+Task Test -Depends Build {
 
     $absoluteModulePaths | ForEach-Object {
         Test-Module $_
     }
 }
 
-Task Build {
+Task Build -Depends Clean {
 
     if (!(Test-Path $rootBuildFolder)) { New-Item -Type directory $rootBuildFolder | Out-Null }
 
