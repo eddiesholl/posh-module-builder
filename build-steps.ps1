@@ -10,7 +10,7 @@ Properties {
     . $configFile
 
     $configBasePath = Split-Path -Parent $configFile
-    
+
     if ($modulesToPack -eq $null) { Write-Error "Variable modulesToPack not set. Please include this in $configFile" }
 
     $absoluteModulePaths = $modulesToPack | ForEach-Object {
@@ -53,17 +53,19 @@ Task Pack -Depends Test {
 
     $installScriptHeader = @"
 # Check that PsGet is installed
-if (!(Get-Command "install-module" -errorAction SilentlyContinue | Out-Null))
+if (!(Get-Command "install-module" -errorAction SilentlyContinue))
 {
     Write-Host "Installing PsGet..."
     (new-object Net.WebClient).DownloadString("http://psget.net/GetPsGet.ps1") | iex
 }
 
+`$scriptPath = Split-Path -Parent `$MyInvocation.MyCommand.Definition
+
 "@
     Add-Content $installScript $installScriptHeader
 
     ls $packagesDir -Filter '*.zip' | ForEach-Object {
-        $content = "Install-Module -ModulePath `"$($_.FullName)`" -Update"
+        $content = "Install-Module -ModulePath (join-path `$scriptPath $($_.Name)) -Update"
         Add-Content $installScript $content
     }
 }
