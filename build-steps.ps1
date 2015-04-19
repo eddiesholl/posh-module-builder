@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'stop'
-
+#Set-StrictMode -Version 2
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 Properties {
@@ -45,20 +45,31 @@ Task Pack -Depends Test {
     }
 
     # Generate a script that can be used to install all generated modules
+    if (Test-Path $installScript) { Remove-Item $installScript -Force }
+
+    Write-Host "Creating install script at $installScript"
+
+    $installScriptHeader = @"
+# Check that PsGet is installed
+if (!(Get-Command "install-module" -errorAction SilentlyContinue | Out-Null))
+{
+    Write-Host "Installing PsGet..."
+    (new-object Net.WebClient).DownloadString("http://psget.net/GetPsGet.ps1") | iex
+}
+
+"@
+    Add-Content $installScript $installScriptHeader
+
     ls $packagesDir -Filter '*.zip' | ForEach-Object {
         $content = "Install-Module -ModulePath `"$($_.FullName)`" -Update"
         Add-Content $installScript $content
     }
-
 }
 
 Task Clean {
-    if (Test-Path $packagesDir) {
-        Write-Host "Removing items from $packagesDir"
-        ls $packagesDir\* -Include @("*.zip", "*.ps1") | Remove-Item
-    }
 
     if (Test-Path $rootBuildFolder) {
+        Write-Host "Cleaning existing build folder $rootBuildFolder"
         Remove-Item $rootBuildFolder -Recurse
     }
 }
@@ -72,7 +83,11 @@ Task Test -Depends Build {
 
 Task Build -Depends Clean {
 
-    if (!(Test-Path $rootBuildFolder)) { New-Item -Type directory $rootBuildFolder | Out-Null }
+    if (!(Test-Path $rootBuildFolder))
+    {
+        Write-Host "Creating build folder $rootBuildFolder"
+        New-Item -Type directory $rootBuildFolder | Out-Null
+    }
 
     $absoluteModulePaths | ForEach-Object {
         Build-Module $_
@@ -107,7 +122,7 @@ function Build-Module {
 
     if (!$manifestContent) { Write-Error "Could not parse module manifest $psdPath" }
 
-    $scriptsToProcess = $manifestContent.NestedModules
+    $scriptsToProcess = @($manifestContent.NestedModules)
 
     if ($scriptsToProcess -and $scriptsToProcess.Length -gt 0)
     {
@@ -180,13 +195,28 @@ function out-zip {
 
     $7z = Join-Path $scriptPath "bin\7z.exe"
 
-    $args = @( "a",$path) + $input
-    Write-Host "Packing zip $path with cmd line $args"
+    $tempFilePath = [System.IO.Path]::GetTempFileName() + '.zip'
 
-    & $7z $args
-
-    if ($lastexitcode -ne 0)
+    try
     {
-        Write-Error "7zip failed with exit code $lastexitcode"
+        $args = @( "a",$tempFilePath) + $input
+        Write-Host "Packing zip $path with cmd line $args"
+
+        & $7z $args
+
+        if ($lastexitcode -eq 0)
+        {
+            Copy-Item $tempFilePath $path -Force
+        }
+        else {
+            Write-Error "7zip failed with exit code $lastexitcode"
+        }
+    }
+    finally
+    {
+        if (Test-Path $tempFilePath)
+        {
+            Remove-Item $tempFilePath
+        }
     }
 }
