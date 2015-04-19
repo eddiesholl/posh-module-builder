@@ -9,6 +9,8 @@ Properties {
 
     . $configFile
 
+    $configBasePath = Split-Path -Parent $configFile
+    
     if ($modulesToPack -eq $null) { Write-Error "Variable modulesToPack not set. Please include this in $configFile" }
 
     $absoluteModulePaths = $modulesToPack | ForEach-Object {
@@ -17,7 +19,7 @@ Properties {
             return $_
         }
         else {
-            return Join-Path $scriptPath $_
+            return Join-Path $configBasePath $_
         }
     }
 
