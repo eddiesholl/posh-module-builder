@@ -126,15 +126,15 @@ function Build-Module {
 
     if (!$manifestContent) { Write-Error "Could not parse module manifest $psdPath" }
 
-    $scriptsToProcess = @($manifestContent.NestedModules)
+    $scriptsToProcess = @($manifestContent.FileList)
+    $updatedScriptPaths = @()
 
     if ($scriptsToProcess -and $scriptsToProcess.Length -gt 0)
     {
-        Write-Host "Updating NestedModules in $psdPath"
+        Write-Host "Updating FileList in $psdPath"
 
-        $updatedScriptPaths = @()
         $scriptsToProcess | ForEach-Object {
-            $scriptPath = $_.Path
+            $scriptPath = $_
             if (Test-Path $scriptPath)
             {
                 Write-Host "Copying referenced script $scriptPath to $outputFolder"
@@ -151,7 +151,7 @@ function Build-Module {
 
         $updatedPsdPath = Join-Path $outputFolder "$moduleName.psd1"
 
-        New-ModuleManifest -Path $updatedPsdPath -ScriptsToProcess $manifestContent.Scripts -NestedModules $updatedScriptPaths -Guid $manifestContent.Guid -Author $manifestContent.Author -CompanyName $manifestContent.CompanyName -Copyright $manifestContent.Copyright -RootModule $manifestContent.RootModule -ModuleVersion $manifestContent.Version -Description $manifestContent.Description -ProcessorArchitecture $manifestContent.ProcessorArchitecture -PowerShellVersion $manifestContent.PowerShellVersion -ClrVersion $manifestContent.ClrVersion -DotNetFrameworkVersion $manifestContent.DotNetFrameworkVersion -PowerShellHostName $manifestContent.PowerShellHostName -PowerShellHostVersion $manifestContent.PowerShellVersion -RequiredModules $manifestContent.RequiredModules -TypesToProcess $manifestContent.TypesToProcess -FormatsToProcess $manifestContent.FormatsToProcess -RequiredAssemblies $manifestContent.RequiredAssemblies -FileList $manifestContent.FileList -ModuleList $manifestContent.ModuleList -FunctionsToExport $manifestContent.FunctionsToExport -AliasesToExport $manifestContent.AliasesToExport -VariablesToExport $manifestContent.VariablesToExport -CmdletsToExport $manifestContent.CmdletsToExport -PrivateData $manifestContent.PrivateData -HelpInfoUri $manifestContent.HelpInfoUri
+        New-ModuleManifest -Path $updatedPsdPath -FileList $updatedScriptPaths -ScriptsToProcess $manifestContent.Scripts -NestedModules $manifestContent.NestedModules -Guid $manifestContent.Guid -Author $manifestContent.Author -CompanyName $manifestContent.CompanyName -Copyright $manifestContent.Copyright -RootModule $manifestContent.RootModule -ModuleVersion $manifestContent.Version -Description $manifestContent.Description -ProcessorArchitecture $manifestContent.ProcessorArchitecture -PowerShellVersion $manifestContent.PowerShellVersion -ClrVersion $manifestContent.ClrVersion -DotNetFrameworkVersion $manifestContent.DotNetFrameworkVersion -PowerShellHostName $manifestContent.PowerShellHostName -PowerShellHostVersion $manifestContent.PowerShellVersion -RequiredModules $manifestContent.RequiredModules -TypesToProcess $manifestContent.TypesToProcess -FormatsToProcess $manifestContent.FormatsToProcess -RequiredAssemblies $manifestContent.RequiredAssemblies -ModuleList $manifestContent.ModuleList -FunctionsToExport $manifestContent.FunctionsToExport -AliasesToExport $manifestContent.AliasesToExport -VariablesToExport $manifestContent.VariablesToExport -CmdletsToExport $manifestContent.CmdletsToExport -PrivateData $manifestContent.PrivateData -HelpInfoUri $manifestContent.HelpInfoUri
     }
     elseif (Test-Path $psdPath) {
         Write-Host "Using original manifest file $psdPath"
